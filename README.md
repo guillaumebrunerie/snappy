@@ -1,97 +1,99 @@
-A library for taking immutable snapshots of mutable state, with all the
-necessary building blocks to implement undo-redo functionality in a
-SolidJS/VanillaJS application.
+A library for reactive state, with efficient support for selectors and immutable
+snapshots. Experiment to see if I can get a more efficient alternative to Redux
+for a large scale project with many selectors and many actions dispatched.
+
+**/!\ Very much work in progress, don’t believe anything here! /!\**
 
 Features
 ========
 
-- **Very fast and memory efficient**: built on ES6 proxies in such a way that no
+- **Fast and memory efficient**: built on ES6 proxies in such a way that no
   deep cloning/deep comparison is needed (except once during initial setup)
-- **Very flexible**: you can choose when to take a snapshot, where to store
-  them, when to restore them, etc.
-- Compatible with SolidJS stores and VanillaJS
-- Supports multiple undo areas (for instance you are making a rich text editor
-  and you want each document to have its own undo history)
-- Supports tagging snapshots with metadata, to get a meaningful undo history
-- You can either use only the basic primitives to build your own undo system,
-  or use the ready made undo/redo utilities
+- **Snapshots**: take snapshots of reactive state in an efficient way, makes it
+  easy to implement undo/redo
+- **Subscriptions and selectors**: get notified when a derived value changes,
+  makes it easy to implement a `useSelector` hook similar to Redux (but more
+  efficient and with built-in memoization).
+
+Advantages over Redux
+=====================
+
+- Selectors are automatically "memoized", in a way that supports dynamic
+  dependencies. So for instance if you have a selector of the form `state =>
+  state.values[state.key]`, there is no way to memoize it properly in Redux (as
+  depending on the value of `state.key` it could depend on anything in
+  `state.values`, but here dynamic dependencies make it work as expected).
+- With Redux, all selectors run again after each dispatch, which can add up if
+  you have thousands of selectors and dispatching actions at every mouse move
+  (although to be fair, Redux still manages to be extremely efficient).
 
 Good to know
 ============
 
-- Only plain Javascript objects, arrays, and primitive types are supported
+- Only plain Javascript objects, arrays, and primitive types are supported.
 - Circular objects or objects with duplicate references are not supported (but
-  snapshots and undo/redo make heavy use of duplicate references to stay
-  memory-efficient even with a very large state).
+  snapshots make heavy use of duplicate references to stay memory-efficient even
+  with a very large state).
 
 Basic primitives
 ================
 
-`Wrapped<T>`: Return type of the `wrap` function.
+* `makeReactive: <T extends object>(obj: T) => Reactive<T>`: Turns an object
+  into a special kind of object (based on ES6 proxies) that will track changes
+  and make sure the snapshots are up to date and that subscriptions are updated.
+  You should always only modify the reactive object and never the initial
+  object.
 
-`wrap: <T extends object>(obj: T) => Wrapped<T>`: Turns an object into a special
-kind of object that will track changes and make sure the snapshots are up to
-date. In order for snapshotting to work, you should only modify the wrapped
-object and never the initial object.
+* `takeSnapshot: (value: unknown) => Snapshot<T>`: Takes an immutable snapshot
+  of a reactive object. It will deeply clone the object the first time it is
+  called, but all subsequent times it will shallow clone as little as possible
+  to create a new snapshot, based on what changed since the previous snapshot.
+  Snapshots themselves can be stored in a reactive object and will then be
+  treated specially, in particular snapshotting them will return the same
+  reference and not a copy and they will not be deep cloned again as they are
+  immutable.
 
-`DeepReadonly<T>`: Return type of the `snapshot` function, snapshots are read
-only.
+* `applySnapshot: <T>(obj: Reactive<T>, snapshot: Snapshot<T>) => void`: Given a
+  reactive object and an (old) snapshot of that object, do all the necessary
+  changes on the wrapped object to revert to the old snapshot. Only the parts
+  that actually differ will be modified.
 
-`snapshot: <T>(obj: Wrapped<T>) => DeepReadonly<T>`: Takes a snapshot of the
-wrapped object. It will deeply clone the object the first time it is called, but
-all subsequent times it will shallow clone as little as possible to create a new
-snapshot, based on what changed since the previous snapshot. Snapshots can be
-stored in a wrapped object and they will then be treated specially, in
-particular snapshotting them will return the same reference and not a copy.
+* `subscribe: <T>(robj: Reactive, selector: (robj: Reactive) => T, callback: (t:
+  T) => void): T`: Given a reactive object, a selector, and a callback, first
+  returns the result of applying the selector on the reactive object, but also
+  register the callback at the parts of the reactive object that were accessed.
+  Whenever modifying a part of the reactive object that was accessed in a
+  subscription, mark the callback as dirty so that a call to `notifySubscribers`
+  will invoke it.
 
-`applySnapshot: <T>(obj: Wrapped<T>, snap: DeepReadOnly<T>) => void`: Given a
-wrapped object and an (old) snapshot of that object, do all the necessary
-changes on the wrapped object to revert to the old snapshot. Only the parts that
-actually differ will be modified.
+* `applyChange: (robj: Reactive, change: (robj: Reactive) => void) => void`:
+  Apply the function on the reactive object, and then call all callbacks that
+  accessed some parts of it that were changed.
 
 
-Undo/redo utilities
-===================
+Undo/redo
+=========
 
-`Undoable<T, M>`: Type `T` with undo/redo support.
+You can easily implement undo/redo using snapshots (assuming you have a global
+state which is a reactive object):
 
-`pushCurrentToUndoStack: (state: Undoable<T, M>, meta: M, historySize = 100) => void`:
-Push a snapshot of the current state to the undo stack, together with arbitrary
-metadata of your choice. It deletes all redo information. You should call this
-function right before making a change that you want to be undoable.
+* Whenever the user does something, take a snapshot of the state and store it
+  somewhere. Note that taking repeated snapshots is very efficient when not much
+  changed from one state to the other, as it will reuse old snapshots for the
+  parts of the state that were not touched.
 
-`doUndo: (state: Undoable<T, M>, steps = 1) => void`: Performs undo.
+* Whenever the user wants to undo/redo, use the `applySnapshot` function to
+  apply the snapshot onto the state. It will only change the parts that actually
+  differ, so it will only affect the subscriptions that are actually affected.
 
-`doRedo: (state: Undoable<T, M>, steps = 1) => void`: Performs redo.
+Redux-like interface
+====================
 
-`initialUndoableState: (initialState: T) => Undoable<T, M>`: Creates an initial
-state.
+You can get a Redux-like interface replacing Redux' immutable state by a
+reactive object.
 
-`getCurrentState: (state: Undoable<T, M>) => T`: Returns the current state
-
-`getUndoStack: (state: Undoable<T, M>) => M[]`: Returns all metadata for the
-undo stack.
-
-`getRedoStack: (state: Undoable<T, M>) => M[]`: Returns all metadata for the
-redo stack.
-
-Usage
-=====
-
-Let's say that you have an object of type `T` for which you wish to enable
-undo/redo. Follow those steps:
-
-- Instead of using an object of type `T`, pass it to `initialUndoableState` to
-  create an object of type `UndoableState<T, M>`.
-- If you want to read the current value of the object, use
-  `getCurrentState`.
-- If you want to modify the value of the object *without saving the current
-  state as an undo step*, simply modify the object returned by `getCurrentState`
-- If you want to modify the value of the object *while saving the current
-  state as an undo step*, call `pushCurrentToUndoStack` first and then modify
-  the object returned by `getCurrentState`. You can optionally pass some
-  metadata if you want for instance to show a undo history to the user
-  somewhere.
-- If you want to undo/redo, call `doUndo`, `doRedo`, or `doUndoRedo`.
-- If you want to inspect the undo/redo stack, use `getUndoStack` or
-  `getRedoStack`.
+* A reducer simply mutates the reactive object, and after the action was
+  dispatched you should call `notifySubscribers`.
+* Selectors can be implemented using `subscribe` and `useSyncExternalStore`. You
+  should also make sure to return a snapshot of the resulting object, otherwise
+  you will not be notified if nested properties are changed.

@@ -1,8 +1,8 @@
 import { expect, it } from "vitest";
-import { applyOldSnapshot, proxify, takeSnapshot } from "./snapshots.ts";
+import { makeReactive, takeSnapshot, applySnapshot } from "./core.ts";
 
 it("snapshots a basic object", () => {
-	const object = proxify({ a: 0 });
+	const object = makeReactive({ a: 0 });
 	const snap1 = takeSnapshot(object);
 	object.a = 2;
 	const snap2 = takeSnapshot(object);
@@ -11,7 +11,7 @@ it("snapshots a basic object", () => {
 });
 
 it("snapshots a complex object", () => {
-	const object = proxify({ a: { b: 0 }, c: { d: 1 } });
+	const object = makeReactive({ a: { b: 0 }, c: { d: 1 } });
 	const snap1 = takeSnapshot(object);
 	object.a.b = 2;
 	const snap2 = takeSnapshot(object);
@@ -20,7 +20,7 @@ it("snapshots a complex object", () => {
 });
 
 it("supports adding complex objects", () => {
-	const object = proxify({ a: 0 });
+	const object = makeReactive({ a: 0 });
 	const snap1 = takeSnapshot(object);
 	object.b = { c: 1 };
 	const snap2 = takeSnapshot(object);
@@ -33,7 +33,7 @@ it("supports adding complex objects", () => {
 });
 
 it("returns the same snapshot for untouched parts", () => {
-	const object = proxify({ a: { b: 0 }, c: { d: 1 } });
+	const object = makeReactive({ a: { b: 0 }, c: { d: 1 } });
 	const snap1 = takeSnapshot(object);
 	object.a.b = 2;
 	const snap2 = takeSnapshot(object);
@@ -41,7 +41,7 @@ it("returns the same snapshot for untouched parts", () => {
 });
 
 it("supports arrays", () => {
-	const object = proxify([1]);
+	const object = makeReactive([1]);
 	const snap1 = takeSnapshot(object);
 	object.push(3);
 	const snap2 = takeSnapshot(object);
@@ -50,7 +50,7 @@ it("supports arrays", () => {
 });
 
 it("supports deleting properties", () => {
-	const object = proxify({ a: 0, b: 3 });
+	const object = makeReactive({ a: 0, b: 3 });
 	const snap1 = takeSnapshot(object);
 	delete object.a;
 	const snap2 = takeSnapshot(object);
@@ -60,7 +60,7 @@ it("supports deleting properties", () => {
 
 it("supports storing snapshots", () => {
 	const baseObject = { current: { a: 0, b: { c: 0 } }, previous: [] };
-	const object = proxify(baseObject);
+	const object = makeReactive(baseObject);
 	object.previous.push(takeSnapshot(object.current));
 	object.current.a = 1;
 	object.previous.push(takeSnapshot(object.current));
@@ -83,7 +83,7 @@ it("supports restoring snapshots", () => {
 		current: { a: 0, b: { c: 0 }, d: { e: 0 } },
 		previous: null,
 	};
-	const object = proxify(baseObject);
+	const object = makeReactive(baseObject);
 	object.current.a = 1;
 	object.previous = takeSnapshot(object.current);
 	object.current.b.c = 2;
@@ -91,7 +91,7 @@ it("supports restoring snapshots", () => {
 		current: { a: 1, b: { c: 2 }, d: { e: 0 } },
 		previous: { a: 1, b: { c: 0 }, d: { e: 0 } },
 	});
-	applyOldSnapshot(object.current, object.previous);
+	applySnapshot(object.current, object.previous);
 	const snap = takeSnapshot(object);
 	expect(snap).toEqual({
 		current: { a: 1, b: { c: 0 }, d: { e: 0 } },
@@ -111,14 +111,14 @@ it("supports restoring snapshots", () => {
 
 it("supports restoring deleted properties", () => {
 	const baseObject = { current: { a: 0 }, previous: null };
-	const object = proxify(baseObject);
+	const object = makeReactive(baseObject);
 	object.previous = takeSnapshot(object.current);
 	object.current.b = 10;
 	expect(takeSnapshot(object)).toEqual({
 		current: { a: 0, b: 10 },
 		previous: { a: 0 },
 	});
-	applyOldSnapshot(object.current, object.previous);
+	applySnapshot(object.current, object.previous);
 	expect(takeSnapshot(object)).toEqual({
 		current: { a: 0 },
 		previous: { a: 0 },
@@ -127,14 +127,14 @@ it("supports restoring deleted properties", () => {
 
 it("supports restoring added properties", () => {
 	const baseObject = { current: { a: 0, c: 3 }, previous: null };
-	const object = proxify(baseObject);
+	const object = makeReactive(baseObject);
 	object.previous = takeSnapshot(object.current);
 	delete object.current.c;
 	expect(takeSnapshot(object)).toEqual({
 		current: { a: 0 },
 		previous: { a: 0, c: 3 },
 	});
-	applyOldSnapshot(object.current, object.previous);
+	applySnapshot(object.current, object.previous);
 	expect(takeSnapshot(object)).toEqual({
 		current: { a: 0, c: 3 },
 		previous: { a: 0, c: 3 },
