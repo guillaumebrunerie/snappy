@@ -2,7 +2,7 @@ A library for reactive state, with efficient support for selectors and immutable
 snapshots. Experiment to see if I can get a more efficient alternative to Redux
 for a large scale project with many selectors and many actions dispatched.
 
-**/!\ Very much work in progress, don’t believe anything here! /!\**
+**⚠️ Very much work in progress, don’t believe anything here! ⚠️**
 
 Features
 ========
@@ -22,7 +22,7 @@ Advantages over Redux
   dependencies. So for instance if you have a selector of the form `state =>
   state.values[state.key]`, there is no way to memoize it properly in Redux (as
   depending on the value of `state.key` it could depend on anything in
-  `state.values`, but here dynamic dependencies make it work as expected).
+  `state.values`), but here dynamic dependencies make it work as expected.
 - With Redux, all selectors run again after each dispatch, which can add up if
   you have thousands of selectors and dispatching actions at every mouse move
   (although to be fair, Redux still manages to be extremely efficient).
@@ -92,8 +92,7 @@ Redux-like interface
 You can get a Redux-like interface replacing Redux' immutable state by a
 reactive object.
 
-* A reducer simply mutates the reactive object, and after the action was
-  dispatched you should call `notifySubscribers`.
+* Reducers simply mutate the reactive object via `applyChange`.
 * Selectors can be implemented using `subscribe` and `useSyncExternalStore`. You
   should also make sure to return a snapshot of the resulting object, otherwise
   you will not be notified if nested properties are changed.
