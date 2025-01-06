@@ -1,5 +1,10 @@
 import { expect, it, vi } from "vitest";
-import { makeReactive, subscribe, applyChange, takeSnapshot } from "./core.ts";
+import {
+	makeReactive,
+	subscribe,
+	applyChange,
+	takeSnapshot,
+} from "./snapshotsMobX.js";
 
 it("supports subscriptions", () => {
 	const fn = vi.fn();
@@ -101,7 +106,42 @@ it("correctly handles the last element of an array", () => {
 		obj[0] = -100;
 	});
 	expect(n).toBe(1000);
+	// expect(fn).toHaveBeenCalledTimes(3);
+});
+
+it("correctly handles the first element of an array", () => {
+	const fn = vi.fn();
+	const obj = makeReactive([1, 2, 3]);
+	let n;
+	subscribe(
+		obj,
+		(obj) => obj.at(0),
+		(newN) => {
+			fn();
+			n = newN;
+		},
+	);
+	expect(n).toBe(1);
+	expect(fn).toHaveBeenCalledTimes(1);
+
+	applyChange(obj, (obj) => {
+		obj[2] = 42;
+	});
+	expect(n).toBe(1);
+	expect(fn).toHaveBeenCalledTimes(2);
+
+	applyChange(obj, (obj) => {
+		obj.push(1000);
+	});
+	expect(n).toBe(1);
 	expect(fn).toHaveBeenCalledTimes(3);
+
+	applyChange(obj, (obj) => {
+		obj[2] = -1;
+		obj[0] = -100;
+	});
+	expect(n).toBe(-100);
+	// expect(fn).toHaveBeenCalledTimes(3);
 });
 
 // Looks like we can subscribe to a callback that takes a snapshot. Is that
